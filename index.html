@@ -1,0 +1,281 @@
+<!doctype html>
+<!-- CCFOLIA 로그 JSON 분할기 — 추출 JSON을 스튜디오에 넣기 전, 표정 데이터는 유지한 채 로그를 잘라 작은 파일들로 나눔 -->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CCFOLIA 로그 분할기</title>
+<style>
+  :root{--bg:#141418;--panel:#1c1c22;--line:#2c2c34;--ink:#e8e8ea;--mut:#9a9aa6;--accent:#b98cff;--accent2:#7f6bd0}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;font-size:14px;line-height:1.6}
+  .wrap{max-width:860px;margin:0 auto;padding:24px 18px 60px}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--mut);margin:0 0 18px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+  .panel h2{font-size:14px;margin:0 0 10px;color:var(--accent)}
+  label.field{display:block;margin:10px 0 4px;color:var(--mut);font-size:13px}
+  input[type=number],textarea,input[type=file]{width:100%;background:#15151b;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 10px;font:inherit}
+  textarea{min-height:84px;resize:vertical;white-space:pre}
+  .drop{border:2px dashed var(--accent2);border-radius:12px;padding:26px;text-align:center;color:var(--mut);cursor:pointer;transition:.15s}
+  .drop.hover{background:#201b2e;border-color:var(--accent)}
+  .drop b{color:var(--accent)}
+  button{background:var(--accent);color:#1a1320;border:none;border-radius:8px;padding:9px 16px;font:inherit;font-weight:700;cursor:pointer}
+  button.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+  button:disabled{opacity:.4;cursor:default}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .opt{display:flex;gap:8px;align-items:center;margin:6px 0}
+  .opt input{accent-color:var(--accent)}
+  .stat{display:flex;gap:18px;flex-wrap:wrap;color:var(--mut)}
+  .stat b{color:var(--ink)}
+  .chunk{border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin:8px 0;background:#17171d}
+  .chunk .h{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+  .chunk .n{font-weight:700}
+  .chunk .meta{color:var(--mut);font-size:12.5px}
+  .chunk .snip{color:var(--mut);font-size:12.5px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pill{display:inline-block;background:#241d33;color:var(--accent);border-radius:999px;padding:1px 9px;font-size:12px;margin-left:6px}
+  .warn{color:#ffb86b;font-size:13px;margin-top:8px}
+  .hint{color:var(--mut);font-size:12.5px;margin-top:6px}
+  a.dl{font-size:13px}
+  .sep{height:1px;background:var(--line);margin:14px 0}
+  code{background:#15151b;border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>CCFOLIA 로그 분할기 🕊️</h1>
+  <p class="sub">큰 추출 JSON을 스튜디오에 넣기 전에 잘라줍니다. 각 조각에는 <b>그 부분에서 쓰인 표정만</b> 담겨 파일이 작아져요.</p>
+
+  <div class="panel">
+    <h2>1. JSON 불러오기</h2>
+    <div id="drop" class="drop"><b>여기에 파일을 끌어다 놓거나</b> 클릭해서 선택<br><span class="hint">extractor가 만든 <code>ccfolia_*.json</code></span></div>
+    <input id="file" type="file" accept=".json,application/json" style="display:none">
+    <div id="stat" class="stat" style="margin-top:12px;display:none"></div>
+    <div id="loadwarn" class="warn"></div>
+  </div>
+
+  <div id="ctrlPanel" class="panel" style="display:none">
+    <h2>2. 분할 방식</h2>
+    <div class="opt"><input type="radio" name="mode" id="mCount" value="count" checked><label for="mCount">메시지 수로 자동 분할</label></div>
+    <div class="opt"><input type="radio" name="mode" id="mMark" value="marker"><label for="mMark">특정 대사에서 분할</label></div>
+
+    <label class="field">한 조각당 최대 메시지 수
+      <span class="hint">(자동 분할의 기준 / 대사 분할에선 너무 길 때 추가로 더 쪼개는 상한. 0이면 상한 없음)</span></label>
+    <input type="number" id="perN" value="600" min="0" step="50" style="max-width:160px">
+
+    <div id="markBox" style="display:none">
+      <label class="field">자를 대사 (한 줄에 하나씩, 입력한 대사 메시지까지가 한 조각)
+        <span class="hint">예: 1부 종료 / 2부 종료 — 그 대사가 나온 직후에서 끊김</span></label>
+      <textarea id="markers" placeholder="1부 종료&#10;2부 종료"></textarea>
+      <div class="opt"><input type="checkbox" id="markContains"><label for="markContains">정확히 일치 대신 <b>포함</b>으로 찾기</label></div>
+    </div>
+
+    <div class="sep"></div>
+    <div class="opt"><input type="checkbox" id="usedOnly" checked><label for="usedOnly">각 조각에 <b>쓰인 표정만</b> 포함 (권장 · 파일 작아짐)</label></div>
+
+    <label class="field">백업 방식</label>
+    <div class="opt"><input type="radio" name="asm" id="aSession" value="session" checked><label for="aSession">한 세션으로 이어붙일 예정 (파일명 <code>_p01, _p02…</code>)</label></div>
+    <div class="opt"><input type="radio" name="asm" id="aSep" value="separate"><label for="aSep">따로따로 백업 (파일명 <code>_part1, _part2…</code>)</label></div>
+
+    <div class="row" style="margin-top:14px">
+      <button id="run">분할 미리보기</button>
+    </div>
+  </div>
+
+  <div id="resPanel" class="panel" style="display:none">
+    <h2>3. 결과</h2>
+    <div id="resHead" class="stat" style="margin-bottom:8px"></div>
+    <div class="row" style="margin-bottom:6px">
+      <button id="dlAll">전체 다운로드</button>
+      <span class="hint">브라우저가 여러 파일 다운로드를 물어보면 허용해 주세요.</span>
+    </div>
+    <div id="chunks"></div>
+    <div id="guide" class="hint" style="margin-top:14px"></div>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let DATA=null, FORMAT='', baseName='ccfolia';
+
+/* ---------- load ---------- */
+const drop=$('drop'), fileEl=$('file');
+drop.addEventListener('click',()=>fileEl.click());
+drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('hover');});
+drop.addEventListener('dragleave',()=>drop.classList.remove('hover'));
+drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('hover');if(e.dataTransfer.files[0])loadFile(e.dataTransfer.files[0]);});
+fileEl.addEventListener('change',e=>{if(e.target.files[0])loadFile(e.target.files[0]);});
+
+function loadFile(file){
+  $('loadwarn').textContent='';
+  baseName=(file.name||'ccfolia').replace(/\.json$/i,'')||'ccfolia';
+  drop.innerHTML='<b>읽는 중…</b><br><span class="hint">'+file.name+' ('+fmtSize(file.size)+')</span>';
+  const r=new FileReader();
+  r.onerror=()=>{$('loadwarn').textContent='파일을 읽지 못했어요.';drop.innerHTML='<b>다시 시도</b>';};
+  r.onload=()=>{
+    // parse off the next tick so UI can paint
+    setTimeout(()=>{
+      try{
+        const obj=JSON.parse(r.result);
+        const msgs=obj.messages||obj.logs||(Array.isArray(obj)?obj:null);
+        if(!msgs||!Array.isArray(msgs)) throw new Error('messages 배열을 찾지 못했어요. 추출기 JSON이 맞는지 확인해 주세요.');
+        DATA={roomId:obj.roomId||'room', exportedAt:obj.exportedAt||Date.now(), icons:obj.icons||null, messages:msgs};
+        FORMAT = DATA.icons ? 'icons-map' : (msgs.some(m=>m&&m.iconData)?'legacy-inline':'no-icons');
+        showStats(file);
+      }catch(err){
+        $('loadwarn').textContent='에러: '+err.message;
+        drop.innerHTML='<b>다른 파일 선택</b>';
+      }
+    },30);
+  };
+  r.readAsText(file);
+}
+
+function showStats(file){
+  drop.innerHTML='<b>'+esc(file.name)+'</b> 불러옴 · <span class="hint">다른 파일을 누르면 교체</span>';
+  const n=DATA.messages.length;
+  let iconCount = DATA.icons ? Object.keys(DATA.icons).length
+                 : new Set(DATA.messages.map(m=>m&&m.iconUrl).filter(Boolean)).size;
+  const fmtName = FORMAT==='icons-map'?'아이콘 맵(중복 제거형)':FORMAT==='legacy-inline'?'메시지별 표정(구형)':'표정 없음';
+  $('stat').style.display='flex';
+  $('stat').innerHTML='<span>메시지 <b>'+n.toLocaleString()+'</b>개</span>'+
+    '<span>표정 <b>'+iconCount.toLocaleString()+'</b>개</span>'+
+    '<span>원본 크기 <b>'+fmtSize(file.size)+'</b></span>'+
+    '<span>형식 <b>'+fmtName+'</b></span>';
+  $('ctrlPanel').style.display='block';
+}
+
+/* ---------- mode toggle ---------- */
+document.querySelectorAll('input[name=mode]').forEach(r=>r.addEventListener('change',()=>{
+  $('markBox').style.display = $('mMark').checked ? 'block':'none';
+}));
+
+/* ---------- split ---------- */
+let CHUNKS=[];
+$('run').addEventListener('click',()=>{
+  if(!DATA)return;
+  const mode = $('mMark').checked?'marker':'count';
+  const cap = Math.max(0, parseInt($('perN').value,10)||0);
+  const msgs=DATA.messages;
+  let warn='';
+
+  let markerSet=null, contains=false, unmatched=[];
+  if(mode==='marker'){
+    contains=$('markContains').checked;
+    const lines=$('markers').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    if(!lines.length){ alert('자를 대사를 한 줄에 하나씩 입력해 주세요.'); return; }
+    markerSet=lines;
+    // detect unmatched markers for a friendly warning
+    const found=new Set();
+    msgs.forEach(m=>{const t=(m&&m.text||'').trim(); lines.forEach(L=>{ if(contains? t.indexOf(L)>=0 : t===L) found.add(L); });});
+    unmatched=lines.filter(L=>!found.has(L));
+    if(unmatched.length) warn='못 찾은 대사: '+unmatched.map(esc).join(' · ')+' (정확히 일치 여부/띄어쓰기를 확인하거나 ‘포함’을 켜보세요)';
+  } else {
+    if(!cap){ alert('자동 분할에는 ‘한 조각당 최대 메시지 수’가 필요해요(1 이상).'); return; }
+  }
+
+  const chunks=[]; let cur=[];
+  for(let i=0;i<msgs.length;i++){
+    const m=msgs[i]; cur.push(m);
+    let cut=false;
+    if(mode==='count'){ if(cur.length>=cap) cut=true; }
+    else{
+      const t=(m&&m.text||'').trim();
+      const hit = markerSet.some(L=> contains? t.indexOf(L)>=0 : t===L);
+      if(hit) cut=true;
+      else if(cap && cur.length>=cap) cut=true; // optional subdivide overly long parts
+    }
+    if(cut){ chunks.push(cur); cur=[]; }
+  }
+  if(cur.length) chunks.push(cur);
+
+  CHUNKS=chunks;
+  renderResults(warn);
+});
+
+function collectIcons(msgs){
+  const out={}; if(!DATA.icons) return out;
+  for(const m of msgs){ const u=m&&m.iconUrl; if(u&&DATA.icons[u]!==undefined&&out[u]===undefined) out[u]=DATA.icons[u]; }
+  return out;
+}
+function estChunkSize(msgs){
+  // rough estimate in bytes
+  let s=0;
+  if(DATA.icons){ const ic=collectIcons(msgs); for(const u in ic) s+=(ic[u]?ic[u].length:0)+u.length+8; s+=msgs.length*180; }
+  else { for(const m of msgs){ s+=200; if(m.iconData) s+=m.iconData.length; if(m.text) s+=m.text.length*2; } }
+  return s;
+}
+function buildChunkBlob(msgs){
+  const usedOnly=$('usedOnly').checked;
+  const parts=['{"roomId":'+JSON.stringify(DATA.roomId)+',"exportedAt":'+JSON.stringify(DATA.exportedAt)];
+  if(DATA.icons){
+    const ic = usedOnly ? collectIcons(msgs) : DATA.icons;
+    parts.push(',"icons":{');
+    let first=true;
+    for(const u in ic){ parts.push((first?'':',')+JSON.stringify(u)+':'+JSON.stringify(ic[u])); first=false; }
+    parts.push('}');
+  }
+  parts.push(',"messages":[');
+  for(let i=0;i<msgs.length;i++){ parts.push((i?',':'')+JSON.stringify(msgs[i])); }
+  parts.push(']}');
+  return new Blob(parts,{type:'application/json'});
+}
+
+function fileNameFor(idx){
+  const asm = $('aSession').checked?'session':'separate';
+  const pad = String(idx+1).padStart(2,'0');
+  const room = (DATA.roomId||baseName).replace(/[^\w.-]/g,'');
+  return asm==='session' ? (baseName+'_p'+pad+'.json') : (baseName+'_part'+(idx+1)+'.json');
+}
+
+function renderResults(warn){
+  $('resPanel').style.display='block';
+  const total=CHUNKS.reduce((a,c)=>a+c.length,0);
+  $('resHead').innerHTML='<span><b>'+CHUNKS.length+'</b>개 조각</span><span>총 <b>'+total.toLocaleString()+'</b> 메시지</span>'+
+    (warn?'<span class="warn">⚠ '+warn+'</span>':'');
+  const box=$('chunks'); box.innerHTML='';
+  CHUNKS.forEach((c,idx)=>{
+    const last=c[c.length-1]||{}; const first=c[0]||{};
+    const snip=(last.name?('['+last.name+'] '):'')+((last.text||'').replace(/\s+/g,' ').slice(0,60));
+    const el=document.createElement('div'); el.className='chunk';
+    el.innerHTML='<div class="h"><div class="n">'+fileNameFor(idx)+
+        '<span class="pill">'+c.length+' msg</span><span class="pill">~'+fmtSize(estChunkSize(c))+'</span></div>'+
+        '<button class="ghost dlone" data-i="'+idx+'">다운로드</button></div>'+
+        '<div class="meta">메시지 '+(globalIndex(idx)+1)+' – '+(globalIndex(idx)+c.length)+'</div>'+
+        '<div class="snip">끝: '+esc(snip||'(빈 메시지)')+'</div>';
+    box.appendChild(el);
+  });
+  box.querySelectorAll('.dlone').forEach(b=>b.addEventListener('click',()=>{
+    const i=+b.dataset.i; downloadBlob(buildChunkBlob(CHUNKS[i]), fileNameFor(i));
+  }));
+  const asm=$('aSession').checked;
+  $('guide').innerHTML = asm
+    ? '한 세션으로 합치기: 스튜디오에 <code>_p01 → _p02 → …</code> 순서로 <b>각각</b> 불러와 편집하고, 각자 ‘블로그용 코드’를 받아 <b>순서대로 이어붙이면</b> 한 연속 로그가 됩니다. (각 파일은 독립적으로 열려요)'
+    : '따로 백업: 각 <code>_part</code> 파일을 개별로 불러와 따로 내보내면 됩니다.';
+}
+let _gi=[];
+function globalIndex(idx){ // start offset of chunk idx
+  if(_giDirty()){ _gi=[]; let s=0; for(const c of CHUNKS){ _gi.push(s); s+=c.length; } _giKey=CHUNKS; }
+  return _gi[idx]||0;
+}
+let _giKey=null;
+function _giDirty(){ return _giKey!==CHUNKS; }
+
+$('dlAll').addEventListener('click',async()=>{
+  for(let i=0;i<CHUNKS.length;i++){
+    downloadBlob(buildChunkBlob(CHUNKS[i]), fileNameFor(i));
+    await new Promise(r=>setTimeout(r,450));
+  }
+});
+
+/* ---------- utils ---------- */
+function downloadBlob(blob,name){
+  const a=document.createElement('a'); const url=URL.createObjectURL(blob);
+  a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),15000);
+}
+function fmtSize(b){ if(b<1024)return b+' B'; if(b<1048576)return (b/1024).toFixed(1)+' KB'; if(b<1073741824)return (b/1048576).toFixed(1)+' MB'; return (b/1073741824).toFixed(2)+' GB'; }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+</script>
+</body>
+</html>
